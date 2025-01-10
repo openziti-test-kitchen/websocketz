@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Stopwatch</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        #stopwatch {
+            font-size: 48px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            text-align: center;
+        }
+        #connection-status {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected {
+            background-color: #2ecc71;
+            color: white;
+        }
+        .disconnected {
+            background-color: #e74c3c;
+            color: white;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f5f5f5;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        #heartbeat-container {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        #heartbeat-status {
+            text-align: center;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        #heartbeat-scroll {
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 5px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        #heartbeat-emojis {
+            display: inline-block;
+            font-size: 24px;
+            min-height: 36px;
+        }
+        #heartbeat-emojis span {
+            margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Stopwatch</h1>
+    <div id="connection-status">Connecting...</div>
+    
+    <div id="heartbeat-container">
+        <div id="heartbeat-status">Seconds since last server heartbeat: waiting...</div>
+        <div id="heartbeat-scroll">
+            <div id="heartbeat-emojis"></div>
+        </div>
+    </div>
+    
+    <div id="stopwatch">00:00:00:00</div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Timer Duration</th>
+                <th>Time of Interruption</th>
+            </tr>
+        </thead>
+        <tbody id="interruptions-log">
+        </tbody>
+    </table>
+    
+    <script>
+        const statusDiv = document.getElementById('connection-status');
+        const stopwatchDiv = document.getElementById('stopwatch');
+        const interruptionsLog = document.getElementById('interruptions-log');
+        const heartbeatStatus = document.getElementById('heartbeat-status');
+        const heartbeatEmojis = document.getElementById('heartbeat-emojis');
+        const heartbeatScroll = document.getElementById('heartbeat-scroll');
+        
+        let startTime = null;
+        let interruptionCount = 0;
+        let stopwatchInterval = null;
+        let wasConnected = false;
+        let lastHeartbeat = null;
+        let heartbeatInterval = null;
+        
+        function formatDuration(ms) {
+            const seconds = Math.floor(ms / 1000);
+            const days = Math.floor(seconds / (24 * 3600));
+            const hours = Math.floor((seconds % (24 * 3600)) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${String(days).padStart(2, '0')}:${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+        
+        function formatTimestamp(date) {
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        }
+        
+        function updateStopwatch() {
+            if (startTime === null) return;
+            const elapsed = Date.now() - startTime;
+            stopwatchDiv.textContent = formatDuration(elapsed);
+        }
+        
+        function updateHeartbeatStatus() {
+            if (lastHeartbeat === null) {
+                heartbeatStatus.textContent = 'Seconds since last server heartbeat: waiting...';
+                return;
+            }
+            const secondsSinceHeartbeat = Math.floor((Date.now() - lastHeartbeat) / 1000);
+            heartbeatStatus.textContent = `Seconds since last server heartbeat: ${secondsSinceHeartbeat}`;
+        }
+        
+        function addHeartbeat(emoji) {
+            const span = document.createElement('span');
+            span.textContent = emoji;
+            heartbeatEmojis.appendChild(span);
+            heartbeatScroll.scrollLeft = heartbeatScroll.scrollWidth;
+        }
+        
+        function logInterruption() {
+            if (startTime === null || !wasConnected) return;
+            const elapsed = Date.now() - startTime;
+            interruptionCount++;
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${interruptionCount}</td>
+                <td>${formatDuration(elapsed)}</td>
+                <td>${formatTimestamp(new Date())}</td>
+            `;
+            
+            interruptionsLog.insertBefore(row, interruptionsLog.firstChild);
+            wasConnected = false;
+        }
+        
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            
+            ws.onopen = function() {
+                statusDiv.textContent = 'Connected';
+                statusDiv.className = 'connected';
+                wasConnected = true;
+                
+                // Reset timer on connection
+                startTime = Date.now();
+                
+                // Start or resume stopwatch
+                if (!stopwatchInterval) {
+                    stopwatchInterval = setInterval(updateStopwatch, 1000);
+                }
+                
+                // Start heartbeat counter
+                if (!heartbeatInterval) {
+                    heartbeatInterval = setInterval(updateHeartbeatStatus, 1000);
+                }
+            };
+            
+            ws.onmessage = function(event) {
+                lastHeartbeat = Date.now();
+                const [emoji] = event.data.split(' ');
+                addHeartbeat(emoji);
+                updateHeartbeatStatus();
+            };
+            
+            ws.onclose = function() {
+                statusDiv.textContent = 'Disconnected - Reconnecting...';
+                statusDiv.className = 'disconnected';
+                
+                // Log the interruption only if we were previously connected
+                logInterruption();
+                
+                // Clear intervals and timer during disconnection
+                if (stopwatchInterval) {
+                    clearInterval(stopwatchInterval);
+                    stopwatchInterval = null;
+                }
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+                startTime = null;
+                lastHeartbeat = null;
+                stopwatchDiv.textContent = '00:00:00:00';
+                heartbeatStatus.textContent = 'Seconds since last server heartbeat: waiting...';
+                heartbeatEmojis.innerHTML = '';
+                
+                setTimeout(connect, 1000);
+            };
+            
+            ws.onerror = function() {
+                statusDiv.textContent = 'Connection Error';
+                statusDiv.className = 'disconnected';
+            };
+        }
+        
+        connect();
+    </script>
+</body>
+</html>
