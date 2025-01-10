@@ -23,15 +23,35 @@ export default defineConfig({
         target: getWsUrl(FRONTEND_URL),
         ws: true,
         secure: false,
+        changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ws/, '/ws'),
         headers: {
           'Origin': FRONTEND_URL
+        },
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('proxy error', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('Proxying:', req.method, req.url, 'to', proxyReq.path);
+          });
+          proxy.on('proxyReqWs', (proxyReq, req, socket, options, _head) => {
+            socket.on('error', (err) => {
+              console.log('WebSocket error:', err);
+            });
+            console.log('Proxying WebSocket:', req.url, 'to', options.target);
+          });
         }
       },
       '/': {
         target: FRONTEND_URL,
         secure: false,
-        changeOrigin: true
+        changeOrigin: true,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('proxy error', err);
+          });
+        }
       }
     }
   }

@@ -81,47 +81,71 @@ function App() {
   const connect = useCallback(() => {
     const wsUrl = getWebSocketUrl()
     console.log('Connecting to WebSocket:', wsUrl)
-    ws.current = new WebSocket(wsUrl)
     
-    ws.current.onopen = () => {
-      setConnectionStatus('Connected')
-      setIsConnected(true)
-      startTime.current = Date.now()
-      
-      stopwatchInterval.current = setInterval(updateStopwatch, 1000)
-      heartbeatInterval.current = setInterval(updateHeartbeatStatus, 1000)
+    // Close existing connection if any
+    if (ws.current) {
+      ws.current.close()
+      ws.current = null
     }
     
-    ws.current.onmessage = (event) => {
-      lastHeartbeat.current = Date.now()
-      const [emoji] = event.data.split(' ')
-      setHeartbeats(prev => [...prev, emoji])
-      updateHeartbeatStatus()
+    try {
+      ws.current = new WebSocket(wsUrl)
       
-      // Scroll to the end of the heartbeat container
-      if (heartbeatScrollRef.current) {
-        heartbeatScrollRef.current.scrollLeft = heartbeatScrollRef.current.scrollWidth
+      ws.current.onopen = () => {
+        console.log('WebSocket connected')
+        setConnectionStatus('Connected')
+        setIsConnected(true)
+        startTime.current = Date.now()
+        
+        stopwatchInterval.current = setInterval(updateStopwatch, 1000)
+        heartbeatInterval.current = setInterval(updateHeartbeatStatus, 1000)
       }
-    }
-    
-    ws.current.onclose = () => {
-      setConnectionStatus('Disconnected - Reconnecting...')
-      setIsConnected(false)
-      logInterruption()
       
-      clearInterval(stopwatchInterval.current)
-      clearInterval(heartbeatInterval.current)
-      startTime.current = null
-      lastHeartbeat.current = null
-      setStopwatchTime('00:00:00:00')
-      setHeartbeats([])
+      ws.current.onmessage = (event) => {
+        console.log('WebSocket message received:', event.data)
+        lastHeartbeat.current = Date.now()
+        const [emoji] = event.data.split(' ')
+        setHeartbeats(prev => [...prev, emoji])
+        updateHeartbeatStatus()
+        
+        if (heartbeatScrollRef.current) {
+          heartbeatScrollRef.current.scrollLeft = heartbeatScrollRef.current.scrollWidth
+        }
+      }
       
-      setTimeout(connect, 1000)
-    }
-    
-    ws.current.onerror = () => {
+      ws.current.onclose = (event) => {
+        console.log('WebSocket closed:', event.code, event.reason)
+        setConnectionStatus('Disconnected - Reconnecting...')
+        setIsConnected(false)
+        logInterruption()
+        
+        clearInterval(stopwatchInterval.current)
+        clearInterval(heartbeatInterval.current)
+        startTime.current = null
+        lastHeartbeat.current = null
+        setStopwatchTime('00:00:00:00')
+        setHeartbeats([])
+        
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+          if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
+            connect()
+          }
+        }, 1000)
+      }
+      
+      ws.current.onerror = (error) => {
+        console.error('WebSocket error:', error)
+        setConnectionStatus('Connection Error')
+        setIsConnected(false)
+      }
+    } catch (error) {
+      console.error('Error creating WebSocket:', error)
       setConnectionStatus('Connection Error')
       setIsConnected(false)
+      
+      // Attempt to reconnect after a delay
+      setTimeout(connect, 1000)
     }
   }, [updateStopwatch, updateHeartbeatStatus, logInterruption])
   
