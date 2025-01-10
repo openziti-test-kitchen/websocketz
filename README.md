@@ -38,7 +38,7 @@ Visit http://localhost:9876 to see the local preview.
 zrok share public 9876
 ```
 
-Visit http://dslno640nct4.share.zrok.io to see the public preview.
+Visit the randomized share token URL, e.g., `http://dslno640nct4.share.zrok.io`.
 
 ## Features
 
