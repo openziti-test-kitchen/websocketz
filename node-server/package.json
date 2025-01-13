@@ -4,6 +4,7 @@
   "description": "WebSocket stopwatch with heartbeat",
   "main": "server.js",
   "dependencies": {
+    "@openziti/zrok": "^0.0.44573",
     "express": "^4.18.2",
     "ws": "^8.16.0"
   }

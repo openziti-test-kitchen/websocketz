@@ -15,18 +15,38 @@ This repository demonstrates two approaches to handling WebSocket connections in
    - Eliminates the need for proxy configuration
    - Provides enhanced security and simplified deployment
 
+## Project Structure
+
+```text
+.
+├── templates/              # Shared HTML templates
+│   └── index.html         # Vanilla JS client
+├── python-server/         # Python implementation
+│   ├── ws.py             # Flask + Flask-Sock server
+│   └── requirements.txt   # Python dependencies
+├── node-server/          # Node.js implementation
+│   ├── server.js         # Express + ws server
+│   └── package.json      # Node.js dependencies
+└── react-client/         # React implementation
+    ├── src/              # React source code
+    ├── package.json      # React dependencies
+    └── vite.config.js    # Vite configuration
+```
+
 ## Quick Start
 
 ### Python Version
 
 ```bash
-pip install flask flask-sock
+cd python-server
+pip install -r requirements.txt
 python ws.py
 ```
 
 ### Node.js Version
 
 ```bash
+cd node-server
 npm install
 node server.js
 ```
@@ -68,7 +88,11 @@ Visit the randomized share token URL, e.g., `http://dslno640nct4.share.zrok.io`.
 - Connection interruption logging
 - Multi-client support
 - Clean separation of HTTP and WebSocket handling
-- Multiple client implementations (vanilla JS, React)
+- Multiple client implementations:
+  - Vanilla JS (shared template)
+  - Node.js (Express + ws)
+  - Python (Flask + Flask-Sock)
+  - React (Vite + WebSocket)
 - Automatic WebSocket URL derivation from frontend URL
 
 ## Architecture
